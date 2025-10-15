@@ -74,6 +74,7 @@ wss.on('connection', (client, req) => {
   const targetSocket = new WebSocket(TARGET_WS, clientProtocol ? [clientProtocol] : undefined, {
     headers: forwardedHeaders,
     // Baileys/WhatsApp don't like aggressive permessage-deflate in some proxies — disable it.
+     rejectUnauthorized: false,
     perMessageDeflate: false,
     // Short handshake timeout to fail fast
     handshakeTimeout: 20000
