@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import fetch from 'node-fetch' // make sure node-fetch is installed
 import { pipeline } from 'stream'
 import { promisify } from 'util'
+import axios from 'axios' // added for keep-alive
 
 const pipe = promisify(pipeline)
 
@@ -17,6 +18,16 @@ const wss = new WebSocketServer({ noServer: true })
 const WA_ORIGIN = 'https://web.whatsapp.com'
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115 Safari/537.36'
 const PROXY_PUBLIC = process.env.WA_PROXY_PUBLIC === 'false' // optional: if false restrict /proxy usage (see notes)
+
+// ---- Keep-alive function to prevent Render from sleeping ----
+const keepAlive = () => {
+  const myUrl = process.env.RENDER_EXTERNAL_URL
+  if (myUrl) {
+    setInterval(() => {
+      axios.get(myUrl).catch(() => {})
+    }, 3 * 60 * 1000)
+  }
+}
 
 // ---- websocket upgrade for /wa-proxy (WhatsApp Web Socket) ----
 server.on('upgrade', (req, socket, head) => {
@@ -87,13 +98,12 @@ app.all('/proxy', async (req, res) => {
     if (!target) return res.status(400).send('Missing ?url=...')
 
     // Optional protection: require an API key unless PROXY_PUBLIC=true
-// Optional protection: require an API key unless PROXY_PUBLIC=true
-if (!PROXY_PUBLIC) {
-  const clientKey = req.headers['x-wa-proxy-key'] || req.query.key
-  if (clientKey !== 'NEXUS') {
-    return res.status(401).send('Unauthorized')
-  }
-}
+    if (!PROXY_PUBLIC) {
+      const clientKey = req.headers['x-wa-proxy-key'] || req.query.key
+      if (clientKey !== 'NEXUS') {
+        return res.status(401).send('Unauthorized')
+      }
+    }
 
     const method = req.method
     // Copy headers but remove hop-by-hop headers and host — we'll set Host specially
@@ -166,4 +176,8 @@ server.keepAliveTimeout = 120000
 server.headersTimeout = 120000
 
 const PORT = process.env.PORT || 3000
-server.listen(PORT, () => console.log(`WhatsApp proxy listening on :${PORT}`))
+server.listen(PORT, () => {
+  console.log(`WhatsApp proxy listening on :${PORT}`)
+  // Start keep-alive after server starts
+  keepAlive()
+})
